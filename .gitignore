@@ -1,0 +1,39 @@
+# .NET
+bin/
+obj/
+publish/
+*.user
+*.suo
+*.cache
+*.nupkg
+*.snupkg
+
+# IDE
+.vs/
+.vscode/
+*.DotSettings.user
+launchSettings.json
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Build outputs
+*.exe
+*.dll
+*.pdb
+*.msi
+
+# Installer output
+Installer/Output/
+
+# VillFlow local data (never commit API keys)
+settings.json
+villflow.log
+
+# ONNX models (too large for git)
+*.onnx
+
+# Native DLLs
+WebRtcVad.dll

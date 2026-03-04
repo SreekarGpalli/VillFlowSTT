@@ -1,0 +1,52 @@
+<Window x:Class="VillFlow.App.Views.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VillFlow Overlay"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        ResizeMode="NoResize"
+        Width="220" Height="48"
+        WindowStartupLocation="Manual">
+    
+    <!-- Pill-shaped floating overlay — bottom-center of screen -->
+    <Border x:Name="PillBorder"
+            CornerRadius="24"
+            Padding="20,10"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Opacity="0">
+        <Border.Background>
+            <SolidColorBrush x:Name="PillBackground" Color="#1A1A2E" />
+        </Border.Background>
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="2" Opacity="0.5" />
+        </Border.Effect>
+        
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+            <!-- Pulsing dot indicator -->
+            <Ellipse x:Name="StatusDot" Width="10" Height="10" Margin="0,0,10,0"
+                     VerticalAlignment="Center">
+                <Ellipse.Fill>
+                    <SolidColorBrush x:Name="DotBrush" Color="#00D4FF" />
+                </Ellipse.Fill>
+            </Ellipse>
+            
+            <!-- Status text -->
+            <TextBlock x:Name="StatusText"
+                       Text="Listening..."
+                       FontSize="14"
+                       FontWeight="Medium"
+                       FontFamily="Segoe UI"
+                       VerticalAlignment="Center">
+                <TextBlock.Foreground>
+                    <SolidColorBrush x:Name="TextBrush" Color="#E8E8E8" />
+                </TextBlock.Foreground>
+            </TextBlock>
+        </StackPanel>
+    </Border>
+</Window>
