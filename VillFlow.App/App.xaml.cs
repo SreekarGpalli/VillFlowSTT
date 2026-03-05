@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using System.Windows.Interop;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -16,6 +17,10 @@ namespace VillFlow.App;
 
 public partial class App : Application
 {
+    // ── Single Instance ──────────────────────────────────────────────────────
+    private static Mutex? _singleInstanceMutex;
+    private const string MutexName = "VillFlow_SingleInstance_E7A3C1F9";
+
     // ── Services ────────────────────────────────────────────────────────────
     private SettingsService _settingsService = null!;
     private HotkeyService _hotkeyService = null!;
@@ -34,6 +39,17 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // ── Single instance check ─────────────────────────────────────────
+        _singleInstanceMutex = new Mutex(true, MutexName, out bool isNewInstance);
+        if (!isNewInstance)
+        {
+            // Another instance is already running — exit silently
+            _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+            Shutdown();
+            return;
+        }
 
         // ── Global exception handlers ────────────────────────────────────
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
@@ -256,7 +272,7 @@ public partial class App : Application
             _trayIcon = new TaskbarIcon
             {
                 ToolTipText = "VillFlow — Voice Dictation",
-                Icon = CreateTrayIcon(),
+                Icon = LoadAppIcon(),
             };
 
             var contextMenu = new System.Windows.Controls.ContextMenu();
@@ -287,32 +303,19 @@ public partial class App : Application
         }
     }
 
-    /// <summary>Creates a simple 16x16 tray icon programmatically.</summary>
-    private static System.Drawing.Icon CreateTrayIcon()
+    /// <summary>Loads the V logo from embedded Assets/app.ico resource.</summary>
+    private static System.Drawing.Icon LoadAppIcon()
     {
         try
         {
-            using var bmp = new Bitmap(16, 16);
-            using var g = Graphics.FromImage(bmp);
-            g.Clear(Color.FromArgb(30, 30, 60));
-            using var brush = new SolidBrush(Color.FromArgb(0, 212, 255));
-            g.FillEllipse(brush, 3, 2, 10, 10);
-            g.FillRectangle(brush, 6, 11, 4, 3);
-            var hIcon = bmp.GetHicon();
-            var icon = System.Drawing.Icon.FromHandle(hIcon);
-            // Clone because FromHandle doesn't take ownership of the handle
-            var cloned = (System.Drawing.Icon)icon.Clone();
-            DestroyIcon(hIcon);
-            return cloned;
+            var uri = new Uri("pack://application:,,,/Assets/app.ico", UriKind.Absolute);
+            var stream = System.Windows.Application.GetResourceStream(uri)?.Stream;
+            if (stream != null)
+                return new System.Drawing.Icon(stream);
         }
-        catch
-        {
-            return SystemIcons.Application;
-        }
+        catch { }
+        return SystemIcons.Application;
     }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool DestroyIcon(IntPtr hIcon);
 
     // ── Window Launchers ────────────────────────────────────────────────────
     private void ShowSettings()
@@ -334,6 +337,14 @@ public partial class App : Application
         _hotkeyService?.Dispose();
         _audioCapture?.Dispose();
         _trayIcon?.Dispose();
+
+        // Release the single-instance mutex
+        if (_singleInstanceMutex != null)
+        {
+            _singleInstanceMutex.ReleaseMutex();
+            _singleInstanceMutex.Dispose();
+        }
+
         base.OnExit(e);
     }
 
