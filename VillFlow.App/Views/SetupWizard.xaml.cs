@@ -71,7 +71,8 @@ public partial class SetupWizard : Window
 
     private void UpdatePolishControlsState()
     {
-        bool isEnabled = WizPolishToggle.IsChecked == true;
+        if (WizPolishGrid == null) return; // Fires during XAML init before grid exists
+        bool isEnabled = WizPolishToggle?.IsChecked == true;
         foreach (var child in WizPolishGrid.Children)
         {
             if (child is Control control)
