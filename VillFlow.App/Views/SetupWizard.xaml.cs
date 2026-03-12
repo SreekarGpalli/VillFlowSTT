@@ -4,6 +4,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using NAudio.Wave;
+using VillFlow.App;
+using VillFlow.App.Constants;
+using VillFlow.App.Services;
+using VillFlow.App.Utilities;
 using VillFlow.Core.Services;
 using VillFlow.Core.Settings;
 
@@ -20,23 +24,21 @@ public partial class SetupWizard : Window
     private int _hotkeyMods = 0x0002; // MOD_CONTROL
     private int _hotkeyVk = 0x20;     // VK_SPACE
 
-    // Known URLs
-    private static readonly Dictionary<SttProvider, string> SttUrls = new()
-    {
-        { SttProvider.Groq, "https://api.groq.com/openai/v1" },
-        { SttProvider.Custom, "" },
-    };
-    private static readonly Dictionary<PolishProvider, string> PolishUrls = new()
-    {
-        { PolishProvider.Groq, "https://api.groq.com/openai/v1" },
-        { PolishProvider.Custom, "" },
-    };
+
 
     public SetupWizard(SettingsService settingsService, App app)
     {
         InitializeComponent();
         _settingsService = settingsService;
         _app = app;
+
+        // Load current hotkey from settings
+        var settings = _settingsService.Current;
+        _hotkeyMods = settings.HotkeyModifiers;
+        _hotkeyVk = settings.HotkeyKey;
+        
+        // Update UI with current hotkey
+        WizHotkeyDisplay.Text = HotkeyHelper.FormatHotkey(_hotkeyMods, _hotkeyVk);
 
         PopulateDropdowns();
         UpdateStepUI();
@@ -45,12 +47,12 @@ public partial class SetupWizard : Window
     private void OnGroqLinkClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://console.groq.com/keys") { UseShellExecute = true }); }
-        catch { }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[VillFlow] OnGroqLinkClick failed: {ex.Message}"); }
     }
 
     private void PopulateDropdowns()
     {
-        // Microphones
+        // Microphones (specific to SetupWizard)
         WizMicCombo.Items.Clear();
         WizMicCombo.Items.Add("System Default");
         for (int i = 0; i < WaveInEvent.DeviceCount; i++)
@@ -60,15 +62,28 @@ public partial class SetupWizard : Window
         }
         WizMicCombo.SelectedIndex = 0;
 
-        // STT providers
-        WizSttProvider.Items.Clear();
-        foreach (var p in Enum.GetValues<SttProvider>())
-            WizSttProvider.Items.Add(p.ToString());
+        // Use shared helper for provider dropdowns
+        UiHelper.PopulateProviderDropdowns(WizSttProvider, WizPolishProvider);
 
-        // Polish providers
-        WizPolishProvider.Items.Clear();
-        foreach (var p in Enum.GetValues<PolishProvider>())
-            WizPolishProvider.Items.Add(p.ToString());
+        // Initialize polish controls state
+        UpdatePolishControlsState();
+    }
+
+    private void UpdatePolishControlsState()
+    {
+        bool isEnabled = WizPolishToggle.IsChecked == true;
+        foreach (var child in WizPolishGrid.Children)
+        {
+            if (child is Control control)
+            {
+                control.IsEnabled = isEnabled;
+            }
+        }
+    }
+
+    private void OnPolishToggleChanged(object sender, RoutedEventArgs e)
+    {
+        UpdatePolishControlsState();
     }
 
     // ── Navigation ──────────────────────────────────────────────────────────
@@ -128,6 +143,11 @@ public partial class SetupWizard : Window
         NextBtn.Content = _currentStep == TotalSteps ? "Finish" : "Next";
 
         // Update step dots
+        UpdateStepDots();
+    }
+
+    private void UpdateStepDots()
+    {
         var dots = new[] { Dot1, Dot2, Dot3, Dot4, Dot5, Dot6 };
         var activeBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#00D4FF"));
         var inactiveBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2A4A7F"));
@@ -164,7 +184,7 @@ public partial class SetupWizard : Window
             _hotkeyMods |= 0x0004;
 
         _hotkeyVk = System.Windows.Input.KeyInterop.VirtualKeyFromKey(e.Key);
-        WizHotkeyDisplay.Text = FormatHotkey(_hotkeyMods, _hotkeyVk);
+        WizHotkeyDisplay.Text = HotkeyHelper.FormatHotkey(_hotkeyMods, _hotkeyVk);
     }
 
     private void OnWizSttProviderChanged(object sender, SelectionChangedEventArgs e)
@@ -172,7 +192,7 @@ public partial class SetupWizard : Window
         if (WizSttProvider.SelectedItem is string provStr &&
             Enum.TryParse<SttProvider>(provStr, out var prov))
         {
-            WizSttUrl.Text = SttUrls.GetValueOrDefault(prov, "");
+            WizSttUrl.Text = ProviderConstants.SttDefaultUrls.GetValueOrDefault(prov, "");
 
             WizSttNote.Text = prov == SttProvider.Custom
                 ? "Enter your OpenAI-compatible endpoint. After fetching, pick an audio/STT model (e.g., whisper-1)."
@@ -185,72 +205,66 @@ public partial class SetupWizard : Window
         if (WizPolishProvider.SelectedItem is string provStr &&
             Enum.TryParse<PolishProvider>(provStr, out var prov))
         {
-            WizPolishUrl.Text = PolishUrls.GetValueOrDefault(prov, "");
+            WizPolishUrl.Text = ProviderConstants.PolishDefaultUrls.GetValueOrDefault(prov, "");
         }
     }
 
     private async void OnWizFetchSttModels(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            if (!Enum.TryParse<SttProvider>(WizSttProvider.SelectedItem?.ToString(), out var prov)) return;
-
-            var models = await ModelFetchService.FetchSttModelsAsync(
-                prov, WizSttKey.Text.Trim(), WizSttUrl.Text.Trim());
-
-            WizSttModel.Items.Clear();
-            foreach (var m in models)
-                WizSttModel.Items.Add(m.Id);
-
-            if (models.Count == 0)
-                WizSttNote.Text = "No models found. Enter a model ID manually in Settings after setup.";
-
-            if (WizSttModel.Items.Count > 0)
-                WizSttModel.SelectedIndex = 0;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Failed to fetch models: {ex.Message}", "Error",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
+        await ModelFetchUiService.FetchSttModelsAndPopulateDropdownAsync(
+            WizSttProvider,
+            WizSttKey,
+            WizSttUrl,
+            WizSttModel,
+            null, // No button to disable in wizard
+            WizSttNote);
     }
 
     private async void OnWizFetchPolishModels(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            if (!Enum.TryParse<PolishProvider>(WizPolishProvider.SelectedItem?.ToString(), out var prov)) return;
-
-            var models = await ModelFetchService.FetchPolishModelsAsync(
-                prov, WizPolishKey.Text.Trim(), WizPolishUrl.Text.Trim());
-
-            WizPolishModel.Items.Clear();
-            foreach (var m in models)
-                WizPolishModel.Items.Add(m.Id);
-
-            if (WizPolishModel.Items.Count > 0)
-                WizPolishModel.SelectedIndex = 0;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Failed to fetch models: {ex.Message}", "Error",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
+        await ModelFetchUiService.FetchPolishModelsAndPopulateDropdownAsync(
+            WizPolishProvider,
+            WizPolishKey,
+            WizPolishUrl,
+            WizPolishModel);
     }
 
     // ── Validation ──────────────────────────────────────────────────────────
 
     private bool ValidateSttStep()
     {
-        if (string.IsNullOrWhiteSpace(WizSttKey.Text) ||
-            string.IsNullOrWhiteSpace(WizSttUrl.Text) ||
-            WizSttModel.SelectedItem == null)
+        bool isValid = true;
+        ClearValidationErrors();
+
+        if (string.IsNullOrWhiteSpace(WizSttKey.Text))
+        {
+            WizSttKey.BorderBrush = Brushes.Red;
+            isValid = false;
+        }
+        if (string.IsNullOrWhiteSpace(WizSttUrl.Text))
+        {
+            WizSttUrl.BorderBrush = Brushes.Red;
+            isValid = false;
+        }
+        if (WizSttModel.SelectedItem == null)
+        {
+            WizSttModel.BorderBrush = Brushes.Red;
+            isValid = false;
+        }
+
+        if (!isValid)
         {
             MessageBox.Show("Please configure at least the primary STT provider with API key and model.",
                 "Incomplete", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return false;
         }
-        return true;
+        return isValid;
+    }
+
+    private void ClearValidationErrors()
+    {
+        WizSttKey.BorderBrush = null;
+        WizSttUrl.BorderBrush = null;
+        WizSttModel.BorderBrush = null;
     }
 
     // ── Save ────────────────────────────────────────────────────────────────
@@ -289,6 +303,11 @@ public partial class SetupWizard : Window
                 SystemPrompt = PolishConfig.DefaultSystemPrompt,
             };
         }
+        else
+        {
+            // Clear polish config when polish is disabled
+            s.Polish = null;
+        }
 
         s.SetupComplete = true;
         _settingsService.Save(s);
@@ -296,20 +315,4 @@ public partial class SetupWizard : Window
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private static string FormatHotkey(int modifiers, int vk)
-    {
-        var parts = new List<string>();
-        if ((modifiers & 0x0002) != 0) parts.Add("Ctrl");
-        if ((modifiers & 0x0001) != 0) parts.Add("Alt");
-        if ((modifiers & 0x0004) != 0) parts.Add("Shift");
-
-        string keyName = vk switch
-        {
-            0x20 => "Space",
-            _ => ((System.Windows.Input.Key)System.Windows.Input.KeyInterop.KeyFromVirtualKey(vk)).ToString()
-        };
-        parts.Add(keyName);
-        return string.Join(" + ", parts);
-    }
 }

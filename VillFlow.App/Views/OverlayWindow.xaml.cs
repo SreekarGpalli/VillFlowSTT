@@ -59,8 +59,12 @@ public partial class OverlayWindow : Window
     private void PositionBottomCenter()
     {
         var screen = SystemParameters.WorkArea;
-        Left = (screen.Width - Width) / 2;
-        Top = screen.Height - Height - 60; // 60px from bottom
+        double newLeft = (screen.Width - Width) / 2;
+        double newTop = screen.Height - Height - 60; // 60px from bottom
+
+        // Ensure window is within visible bounds
+        Left = Math.Max(screen.Left, Math.Min(newLeft, screen.Right - Width));
+        Top = Math.Max(screen.Top, Math.Min(newTop, screen.Bottom - Height));
     }
 
     /// <summary>
@@ -114,6 +118,8 @@ public partial class OverlayWindow : Window
             StatusDot.Opacity = 1.0;
         }
 
+        // Position on screen (may have been off-screen during startup for hotkey registration)
+        PositionBottomCenter();
         // Fade in (non-activating — just make visible)
         Show();
         var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(150));

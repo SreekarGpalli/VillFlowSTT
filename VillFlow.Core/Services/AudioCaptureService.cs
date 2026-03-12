@@ -29,6 +29,9 @@ public sealed class AudioCaptureService : IDisposable
     /// <summary>Fires for each raw audio frame. Useful for level meters or debug.</summary>
     public event Action<byte[], int>? RawFrameAvailable;
 
+    /// <summary>Fires when the microphone device is disconnected during recording.</summary>
+    public event Action? DeviceDisconnected;
+
     public AudioCaptureService(SpeechBuffer speechBuffer)
     {
         _speechBuffer = speechBuffer;
@@ -43,6 +46,13 @@ public sealed class AudioCaptureService : IDisposable
         lock (_recordLock)
         {
             if (_isRecording) return;
+
+            // Validate device number (-1 = WAVE_MAPPER/system default, 0..N = specific device)
+            int deviceCount = WaveInEvent.DeviceCount;
+            if (deviceNumber < -1 || deviceNumber >= deviceCount)
+            {
+                throw new ArgumentException($"Invalid device number {deviceNumber}. Valid range is -1 (default) to {deviceCount - 1}.");
+            }
 
             _totalFrames = 0;
 
@@ -96,7 +106,46 @@ public sealed class AudioCaptureService : IDisposable
         if (e.Exception != null)
         {
             LogInfo?.Invoke($"[AudioCapture] Recording error: {e.Exception.Message}");
+            
+            // Check if it's a device disconnection error
+            if (IsDeviceDisconnectionError(e.Exception))
+            {
+                // Notify via event
+                DeviceDisconnected?.Invoke();
+                
+                // Stop recording and clean up
+                lock (_recordLock)
+                {
+                    _isRecording = false;
+                    DisposeWaveIn();
+                }
+                
+                LogInfo?.Invoke("[AudioCapture] Device disconnected during recording");
+            }
         }
+    }
+
+    private bool IsDeviceDisconnectionError(Exception ex)
+    {
+        // Check for NAudio-specific device disconnection errors
+        // NAudio might throw MmException with specific error codes
+        if (ex is NAudio.MmException mmEx)
+        {
+            // Common NAudio error codes for device issues:
+            // MMSYSERR_NODRIVER = 6 (No device driver is present)
+            // MMSYSERR_BADDEVICEID = 2 (The specified device identifier is out of range)
+            // WAVERR_BADFORMAT = 32 (The specified format is not supported)
+            return mmEx.Result == NAudio.MmResult.NoDriver ||
+                   mmEx.Result == NAudio.MmResult.BadDeviceId;
+        }
+        
+        // Check exception message for common disconnection indicators
+        string message = ex.Message.ToLowerInvariant();
+        return message.Contains("device") && 
+               (message.Contains("disconnect") || 
+                message.Contains("not found") || 
+                message.Contains("removed") ||
+                message.Contains("unplugged"));
     }
 
     private void DisposeWaveIn()

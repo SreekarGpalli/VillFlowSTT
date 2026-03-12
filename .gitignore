@@ -37,3 +37,13 @@ villflow.log
 
 # Native DLLs
 WebRtcVad.dll
+
+# Kiro / spec artifacts (local dev only)
+.kiro/
+
+# Test projects (not shipped)
+VillFlow.Tests/
+dist/
+
+# Internal dev docs
+BUGFIX_AUDIT_REPORT.md

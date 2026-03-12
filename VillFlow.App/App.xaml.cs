@@ -35,6 +35,8 @@ public partial class App : Application
     private static readonly string LogPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "VillFlow", "villflow.log");
+    private const int MaxLogBytes = 512 * 1024;  // 512 KB
+    private const int KeepLogBytes = 128 * 1024; // Keep last 128 KB when trimming
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -71,6 +73,7 @@ public partial class App : Application
             args.SetObserved(); // Don't crash
         };
 
+        RotateLogIfNeeded();
         Log("=== VillFlow starting ===");
 
         try
@@ -107,8 +110,11 @@ public partial class App : Application
             // ── Overlay window ──────────────────────────────────────────
             _overlay = new OverlayWindow();
             _overlay.Loaded += OnOverlayLoaded;
+            // XAML has Visibility=Collapsed - must set Visible for Loaded to fire (needed for hotkey HWND)
+            _overlay.Visibility = Visibility.Visible;
+            _overlay.Left = -10000;
+            _overlay.Top = -10000;
             _overlay.Show();
-            _overlay.Hide();
             Log("Overlay created");
 
             // Wire overlay state updates
@@ -137,6 +143,7 @@ public partial class App : Application
             Log($"STARTUP CRASH: {ex}");
             MessageBox.Show($"VillFlow failed to start:\n{ex.Message}\n\nCheck log:\n{LogPath}",
                 "Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown();
         }
     }
 
@@ -156,6 +163,8 @@ public partial class App : Application
             {
                 Log("ERROR: No HwndSource after Loaded!");
             }
+            // Hide overlay after registration (was shown off-screen just to trigger Loaded)
+            _overlay.Hide();
         }
         catch (Exception ex)
         {
@@ -313,7 +322,10 @@ public partial class App : Application
             if (stream != null)
                 return new System.Drawing.Icon(stream);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Log($"LoadAppIcon failed: {ex.Message}");
+        }
         return SystemIcons.Application;
     }
 
@@ -349,6 +361,27 @@ public partial class App : Application
     }
 
     // ── Logging ─────────────────────────────────────────────────────────────
+    private static void RotateLogIfNeeded()
+    {
+        try
+        {
+            if (!File.Exists(LogPath)) return;
+            var info = new FileInfo(LogPath);
+            if (info.Length <= MaxLogBytes) return;
+
+            var bytes = File.ReadAllBytes(LogPath);
+            var keep = Math.Min(KeepLogBytes, bytes.Length);
+            var nl = System.Text.Encoding.UTF8.GetBytes(Environment.NewLine);
+            var header = System.Text.Encoding.UTF8.GetBytes("[log trimmed - older entries removed]\n");
+            var trimmed = new byte[header.Length + keep + nl.Length];
+            Array.Copy(header, trimmed, header.Length);
+            Array.Copy(bytes, bytes.Length - keep, trimmed, header.Length, keep);
+            Array.Copy(nl, 0, trimmed, header.Length + keep, nl.Length);
+            File.WriteAllBytes(LogPath, trimmed);
+        }
+        catch { /* Never crash on log rotation */ }
+    }
+
     private static void Log(string message)
     {
         try

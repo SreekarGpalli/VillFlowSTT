@@ -122,7 +122,7 @@
                            Foreground="{StaticResource TextPrimaryBrush}" Margin="0,20,0,12" />
                 <CheckBox x:Name="WizPolishToggle" Content="Enable AI text polishing"
                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"
-                          IsChecked="True" />
+                          IsChecked="True" Checked="OnPolishToggleChanged" Unchecked="OnPolishToggleChanged" />
 
                 <Grid x:Name="WizPolishGrid">
                     <Grid.ColumnDefinitions>

@@ -65,6 +65,11 @@ public sealed class GroqSttService : ISttService
     {
         var trimmed = text.Trim().TrimEnd('.').Trim();
 
+        // Whitelist of valid single words that should not be filtered
+        string[] validSingleWords = { "Yes", "No", "Okay", "Hello", "Stop", "Go", "Next", "Back" };
+        if (validSingleWords.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+            return false;
+
         // Known Whisper hallucination phrases (exact or near-exact matches)
         string[] hallucinations =
         {
@@ -83,9 +88,11 @@ public sealed class GroqSttService : ISttService
 
         // Very short output (1-2 words) from audio > 1 second is usually a hallucination
         var wordCount = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-        if (wordCount <= 1 && trimmed.Length < 10)
+        if (wordCount <= 1 && trimmed.Length < 2)
             return true;
 
         return false;
     }
+
+    public void Dispose() => _client?.Dispose();
 }

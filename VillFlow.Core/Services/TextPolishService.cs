@@ -12,7 +12,7 @@ namespace VillFlow.Core.Services;
 /// Post-processes raw STT transcript through an LLM for grammar/accent correction.
 /// Uses the OpenAI chat completions format (/chat/completions).
 /// </summary>
-public sealed class TextPolishService
+public sealed class TextPolishService : IDisposable
 {
     private readonly HttpClient _client;
     private readonly PolishConfig _config;
@@ -203,4 +203,6 @@ public sealed class TextPolishService
 
     private static string Truncate(string text, int maxLen) =>
         text.Length > maxLen ? text[..maxLen] + "..." : text;
+
+    public void Dispose() => _client?.Dispose();
 }

@@ -17,6 +17,9 @@ public sealed class CustomSttService : ISttService
     private readonly string _baseUrl;
     private readonly string _model;
 
+    // Maximum length for error log messages
+    private const int MAX_ERROR_LOG_LENGTH = 500;
+
     /// <summary>Optional logger.</summary>
     public static Action<string>? LogInfo { get; set; }
 
@@ -54,15 +57,16 @@ public sealed class CustomSttService : ISttService
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorBody = await response.Content.ReadAsStringAsync(ct);
-                    LogInfo?.Invoke($"[CustomSTT] Attempt {attempt} failed: HTTP {(int)response.StatusCode} — {Truncate(errorBody, 200)}");
+                    var truncatedError = TruncateErrorLog(errorBody);
+                    LogInfo?.Invoke($"[CustomSTT] Attempt {attempt} failed: HTTP {(int)response.StatusCode} — {truncatedError}");
 
-                    // Don't retry on auth errors or client errors (except 400 which might be format-related)
+                    // Don't retry on auth errors or client errors (including 400 which indicates bad request)
                     if ((int)response.StatusCode == 401 || (int)response.StatusCode == 403)
                         throw new HttpRequestException($"Authentication failed ({(int)response.StatusCode})");
-                    if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500 && (int)response.StatusCode != 400)
-                        throw new HttpRequestException($"Client error ({(int)response.StatusCode}): {Truncate(errorBody, 200)}");
+                    if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                        throw new HttpRequestException($"Client error ({(int)response.StatusCode}): {truncatedError}");
 
-                    lastEx = new HttpRequestException($"HTTP {(int)response.StatusCode}: {Truncate(errorBody, 200)}");
+                    lastEx = new HttpRequestException($"HTTP {(int)response.StatusCode}: {truncatedError}");
                     continue; // Try fallback format
                 }
 
@@ -73,6 +77,7 @@ public sealed class CustomSttService : ISttService
                 lastEx = new InvalidOperationException("API returned success but no transcript text");
             }
             catch (OperationCanceledException) { throw; } // Don't retry timeouts
+            catch (HttpRequestException) { throw; } // Don't retry HTTP errors (including 4xx client errors)
             catch (Exception ex) when (attempt == 1)
             {
                 LogInfo?.Invoke($"[CustomSTT] Attempt {attempt} error: {ex.Message}");
@@ -239,6 +244,9 @@ public sealed class CustomSttService : ISttService
     private static string Truncate(string text, int maxLen) =>
         text.Length > maxLen ? text[..maxLen] + "..." : text;
 
+    private static string TruncateErrorLog(string errorBody) =>
+        Truncate(errorBody, MAX_ERROR_LOG_LENGTH);
+
     private static IEnumerable<string> EnumerateKeys(JsonElement element)
     {
         if (element.ValueKind == JsonValueKind.Object)
@@ -247,4 +255,6 @@ public sealed class CustomSttService : ISttService
                 yield return prop.Name;
         }
     }
+
+    public void Dispose() => _client?.Dispose();
 }

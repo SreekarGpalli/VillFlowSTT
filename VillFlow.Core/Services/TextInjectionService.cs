@@ -40,11 +40,18 @@ public static class TextInjectionService
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GlobalUnlock(IntPtr hMem);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GlobalFree(IntPtr hMem);
+
     // ── Constants ───────────────────────────────────────────────────────────
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const uint CF_UNICODETEXT = 13;
     private const uint GMEM_MOVEABLE = 0x0002;
+
+    // Timing constants for clipboard operations
+    private const int CLIPBOARD_SETTLE_DELAY_MS = 100;
+    private const int PASTE_DELAY_MS = 50;
 
     // VK codes
     private const ushort VK_CONTROL = 0x11;
@@ -150,12 +157,13 @@ public static class TextInjectionService
             return;
         }
 
+        IntPtr hGlobal = IntPtr.Zero;
         try
         {
             EmptyClipboard();
 
             int byteCount = (text.Length + 1) * 2; // UTF-16, null-terminated
-            var hGlobal = GlobalAlloc(GMEM_MOVEABLE, (UIntPtr)byteCount);
+            hGlobal = GlobalAlloc(GMEM_MOVEABLE, (UIntPtr)byteCount);
             if (hGlobal == IntPtr.Zero)
             {
                 LogInfo?.Invoke("[TextInjection] GlobalAlloc failed");
@@ -173,15 +181,33 @@ public static class TextInjectionService
                 GlobalUnlock(hGlobal);
             }
 
-            SetClipboardData(CF_UNICODETEXT, hGlobal);
+            // Set clipboard data and check if it succeeded
+            if (SetClipboardData(CF_UNICODETEXT, hGlobal) == IntPtr.Zero)
+            {
+                LogInfo?.Invoke("[TextInjection] SetClipboardData failed");
+                // If SetClipboardData fails, we need to free the memory ourselves
+                GlobalFree(hGlobal);
+                hGlobal = IntPtr.Zero;
+                return;
+            }
+            // If SetClipboardData succeeds, the system owns the memory
+            // We should not free it, so set hGlobal to IntPtr.Zero
+            hGlobal = IntPtr.Zero;
         }
         finally
         {
             CloseClipboard();
+            // FIX: Call GlobalFree to prevent memory leak
+            // According to Microsoft documentation, we should free the memory
+            // after CloseClipboard to ensure proper cleanup
+            if (hGlobal != IntPtr.Zero)
+            {
+                GlobalFree(hGlobal);
+            }
         }
 
         // Delay to let clipboard propagate
-        Thread.Sleep(100);
+        Thread.Sleep(CLIPBOARD_SETTLE_DELAY_MS);
 
         // Release modifiers again before sending Ctrl+V
         ReleaseModifiers();
@@ -240,7 +266,7 @@ public static class TextInjectionService
         {
             var arr = releaseInputs.ToArray();
             SendInput((uint)arr.Length, arr, Marshal.SizeOf<INPUT>());
-            Thread.Sleep(50);
+            Thread.Sleep(PASTE_DELAY_MS);
         }
     }
 }

@@ -1,73 +1,56 @@
 # VillFlow
 
-Voice dictation for Windows. Hold a hotkey, speak, text appears at your cursor.
+Voice dictation for Windows. Hold a hotkey, speak, text shows up at your cursor. Uses [Groq](https://groq.com)'s free API so there's no cost to run.
 
-Uses [Groq](https://groq.com)'s free API — no cost to run.
+Hold `Ctrl+Space`, talk, release — it transcribes, optionally polishes spelling/grammar, and pastes wherever you were typing. Works in any Windows app. System tray icon, floating overlay so you know when it's recording. You can add fallback STT providers or bring your own OpenAI-compatible endpoint.
 
-## Features
+## Getting started
 
-- **Hold-to-dictate** — Hold `Ctrl+Space`, speak, release. Done.
-- **Text polish** — Fixes spelling, grammar, punctuation. Strips filler words.
-- **Works everywhere** — Pastes text at your cursor in any Windows app.
-- **Fallback STT** — Primary + up to 2 fallback providers.
-- **System tray app** — Floating overlay shows recording state.
-- **Custom APIs** — Bring your own OpenAI-compatible endpoint.
+**Download:** Grab the latest `VillFlow.msi` or `VillFlow.App.exe` from [Releases](https://github.com/SreekarGpalli/VillFlowSTT/releases) and run it. No installer needed for the exe — just extract and go.
 
-## Getting Started
-
-### Download
-Grab `VillFlowSetup.exe` from [Releases](../../releases) and run the installer.
-
-### Build from Source
+**Build from source:**
 ```powershell
 git clone https://github.com/SreekarGpalli/VillFlowSTT.git
 cd VillFlowSTT
 dotnet publish VillFlow.App -c Release -r win-x64 --self-contained
 ```
-Requires .NET 8 SDK and Windows 10/11 x64.
+Requires .NET 8 SDK on Windows 10/11 x64. Or run `.\Build-Release.ps1` to produce both the exe and MSI installer.
 
 ## Setup
 
-1. Setup wizard opens on first run
-2. Get a free Groq API key at [console.groq.com/keys](https://console.groq.com/keys)
-3. Pick your mic and hotkey (default: `Ctrl+Space`)
-4. Configure STT provider — Groq works out of the box
-5. Optionally enable text polish (same Groq key works)
+On first run a setup wizard walks you through it: grab a free Groq API key from [console.groq.com/keys](https://console.groq.com/keys), pick your mic and hotkey (default is Ctrl+Space), choose your STT provider. Groq works out of the box. You can also turn on text polish if you want — same key.
 
-## How It Works
+## How it works
 
 | Action | Result |
-|---|---|
-| Hold `Ctrl+Space` | Starts recording, overlay shows "Listening..." |
-| Release | Transcribes → polishes → pastes at cursor |
+|--------|--------|
+| Hold Ctrl+Space | Recording starts, overlay shows "Listening..." |
+| Release | Transcribes → polishes (if enabled) → pastes at cursor |
 | Right-click tray icon | Settings, setup wizard, quit |
 
 ## Providers
 
-**STT:** Groq (Whisper, free tier) or any OpenAI-compatible `/audio/transcriptions` endpoint.
+**STT:** Groq's Whisper (free tier) or any OpenAI-compatible `/audio/transcriptions` endpoint.
 
-**Text Polish:** Groq (Llama/Mixtral, free tier) or any OpenAI-compatible `/chat/completions` endpoint.
+**Text polish:** Groq (Llama/Mixtral, free tier) or any OpenAI-compatible `/chat/completions` endpoint.
 
-## Project Layout
+## Project layout
 
 ```
 VillFlow.sln
-VillFlow.Core/           # Business logic — no UI dependency
-  Services/              # Audio, hotkey, STT, polish, text injection
-  Orchestration/         # Pipeline controller
-  Settings/              # JSON config, persistence
-VillFlow.App/            # WPF shell
-  Views/                 # Overlay, settings, setup wizard
-Installer/               # Inno Setup script
+VillFlow.Core/       # Business logic, no UI
+  Services/          # Audio capture, STT, polish, text injection
+  Orchestration/     # Pipeline controller
+  Settings/         # Config persistence, API key handling
+VillFlow.App/       # WPF UI
+  Views/            # Overlay, settings, setup wizard
+VillFlow.Installer/ # WiX MSI
 ```
 
 ## Security
 
-- API keys stay on your machine in `%LOCALAPPDATA%\VillFlow\settings.json`
-- Nothing is logged or sent anywhere except the APIs you configure
-- All calls over HTTPS
-- No telemetry
+API keys live in `%LOCALAPPDATA%\VillFlow\settings.json` and are encrypted on disk. Nothing is logged or sent except to the APIs you configure. All HTTPS, no telemetry.
 
 ## License
 
-[MIT](LICENSE)
+MIT

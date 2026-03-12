@@ -18,6 +18,10 @@ public sealed class PipelineOrchestrator
 {
     private readonly SettingsService _settingsService;
 
+    // Timing constants for pipeline state transitions
+    private const int STATE_TRANSITION_DELAY_MS = 150;
+    private const int CLEANUP_DELAY_MS = 300;
+
     /// <summary>Pipeline states for the overlay UI.</summary>
     public enum PipelineState { Idle, Listening, Processing, Typing }
 
@@ -43,7 +47,30 @@ public sealed class PipelineOrchestrator
     }
 
     /// <summary>Signals the overlay that recording has started.</summary>
-    public void NotifyListeningStarted() => StateChanged?.Invoke(PipelineState.Listening);
+    public void NotifyListeningStarted() => SafeInvokeStateChanged(PipelineState.Listening);
+
+    /// <summary>
+    /// Safely invokes the StateChanged event, catching exceptions from individual subscribers
+    /// to ensure all subscribers are notified even if one throws.
+    /// </summary>
+    private void SafeInvokeStateChanged(PipelineState state)
+    {
+        var handlers = StateChanged?.GetInvocationList();
+        if (handlers == null) return;
+
+        foreach (var handler in handlers)
+        {
+            try
+            {
+                ((Action<PipelineState>)handler)(state);
+            }
+            catch (Exception ex)
+            {
+                // Log the exception but continue to next subscriber
+                LogInfo?.Invoke($"[Pipeline] StateChanged subscriber threw: {ex.Message}");
+            }
+        }
+    }
 
     /// <summary>
     /// Runs the full pipeline: STT → Polish → Inject.
@@ -57,14 +84,14 @@ public sealed class PipelineOrchestrator
         if (wavBytes.Length < MinAudioBytes)
         {
             LogInfo?.Invoke($"[Pipeline] Audio too short ({wavBytes.Length} bytes), skipping");
-            StateChanged?.Invoke(PipelineState.Idle);
+            SafeInvokeStateChanged(PipelineState.Idle);
             return;
         }
 
         try
         {
             // ── Step 1: Transcription (cascading) ───────────────────────────
-            StateChanged?.Invoke(PipelineState.Processing);
+            SafeInvokeStateChanged(PipelineState.Processing);
 
             var settings = _settingsService.Current;
             string? transcript = null;
@@ -75,7 +102,7 @@ public sealed class PipelineOrchestrator
 
                 try
                 {
-                    var sttService = SttProviderFactory.Create(slot);
+                    using var sttService = SttProviderFactory.Create(slot);
                     if (sttService == null) continue;
 
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(slot.TimeoutSeconds));
@@ -100,7 +127,7 @@ public sealed class PipelineOrchestrator
             {
                 LogInfo?.Invoke("[Pipeline] All STT providers failed or returned empty text.");
                 ErrorOccurred?.Invoke("All STT providers failed or returned empty text.");
-                StateChanged?.Invoke(PipelineState.Idle);
+                SafeInvokeStateChanged(PipelineState.Idle);
                 return;
             }
 
@@ -111,7 +138,7 @@ public sealed class PipelineOrchestrator
             {
                 try
                 {
-                    var polisher = new TextPolishService(settings.Polish);
+                    using var polisher = new TextPolishService(settings.Polish);
                     using var cts = new CancellationTokenSource(
                         TimeSpan.FromSeconds(settings.Polish.TimeoutSeconds));
                     finalText = await polisher.PolishAsync(transcript, cts.Token);
@@ -127,10 +154,10 @@ public sealed class PipelineOrchestrator
             }
 
             // ── Step 3: Text Injection ──────────────────────────────────────
-            StateChanged?.Invoke(PipelineState.Typing);
+            SafeInvokeStateChanged(PipelineState.Typing);
 
             // Small delay to let the overlay state update and OS settle focus
-            await Task.Delay(150);
+            await Task.Delay(STATE_TRANSITION_DELAY_MS);
 
             LogInfo?.Invoke($"[Pipeline] Injecting text ({finalText.Length} chars)");
 
@@ -150,7 +177,7 @@ public sealed class PipelineOrchestrator
             LogInfo?.Invoke("[Pipeline] Text injection completed");
 
             // Brief pause for the "Typing" state to be visible on overlay
-            await Task.Delay(300);
+            await Task.Delay(CLEANUP_DELAY_MS);
         }
         catch (Exception ex)
         {
@@ -159,7 +186,7 @@ public sealed class PipelineOrchestrator
         }
         finally
         {
-            StateChanged?.Invoke(PipelineState.Idle);
+            SafeInvokeStateChanged(PipelineState.Idle);
         }
     }
 }

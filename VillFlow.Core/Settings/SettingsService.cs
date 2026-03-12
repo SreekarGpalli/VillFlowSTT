@@ -1,12 +1,13 @@
 // VillFlow.Core/Settings/SettingsService.cs
 // JSON-based settings persistence to %LOCALAPPDATA%\VillFlow\settings.json
+// API keys are encrypted with DPAPI before storage.
 using System.Text.Json;
 
 namespace VillFlow.Core.Settings;
 
 /// <summary>
 /// Loads and saves <see cref="AppSettings"/> as a JSON file.
-/// Thread-safe via lock. No SQLite, no encryption — plaintext by design.
+/// Thread-safe via lock. API keys are encrypted with DPAPI before storage.
 /// </summary>
 public sealed class SettingsService
 {
@@ -15,6 +16,9 @@ public sealed class SettingsService
 
     private static readonly string SettingsPath =
         Path.Combine(SettingsDir, "settings.json");
+
+    private static readonly string BackupPath =
+        Path.Combine(SettingsDir, "settings.json.bak");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -47,6 +51,8 @@ public sealed class SettingsService
                 {
                     var json = File.ReadAllText(SettingsPath);
                     _cached = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+                    if (_cached.SttSlots == null)
+                        _cached.SttSlots = new List<SttSlotConfig>();
                 }
                 else
                 {
@@ -55,9 +61,29 @@ public sealed class SettingsService
             }
             catch
             {
-                // Corrupt file — start fresh
-                _cached = new AppSettings();
+                // Corrupt file — try to restore from backup
+                if (File.Exists(BackupPath))
+                {
+                    try
+                    {
+                        var backupJson = File.ReadAllText(BackupPath);
+                        _cached = JsonSerializer.Deserialize<AppSettings>(backupJson, JsonOptions) ?? new AppSettings();
+                    }
+                    catch
+                    {
+                        // Backup also corrupt — start fresh
+                        _cached = new AppSettings();
+                    }
+                }
+                else
+                {
+                    // No backup — start fresh
+                    _cached = new AppSettings();
+                }
             }
+            if (_cached.SttSlots == null)
+                _cached.SttSlots = new List<SttSlotConfig>();
+            DecryptApiKeys(_cached);
             return _cached;
         }
     }
@@ -72,8 +98,48 @@ public sealed class SettingsService
         {
             _cached = settings;
             Directory.CreateDirectory(SettingsDir);
-            var json = JsonSerializer.Serialize(settings, JsonOptions);
+
+            if (File.Exists(SettingsPath))
+                File.Copy(SettingsPath, BackupPath, overwrite: true);
+
+            var toSerialize = CloneForStorage(settings);
+            EncryptApiKeys(toSerialize);
+            var json = JsonSerializer.Serialize(toSerialize, JsonOptions);
             File.WriteAllText(SettingsPath, json);
         }
+    }
+
+    private static AppSettings CloneForStorage(AppSettings s)
+    {
+        var json = JsonSerializer.Serialize(s, JsonOptions);
+        return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+    }
+
+    private static void EncryptApiKeys(AppSettings s)
+    {
+        if (s.SttSlots != null)
+        {
+            foreach (var slot in s.SttSlots)
+            {
+                if (!string.IsNullOrEmpty(slot.ApiKey))
+                    slot.ApiKey = ApiKeyProtection.Encrypt(slot.ApiKey);
+            }
+        }
+        if (s.Polish != null && !string.IsNullOrEmpty(s.Polish.ApiKey))
+            s.Polish.ApiKey = ApiKeyProtection.Encrypt(s.Polish.ApiKey);
+    }
+
+    private static void DecryptApiKeys(AppSettings s)
+    {
+        if (s.SttSlots != null)
+        {
+            foreach (var slot in s.SttSlots)
+            {
+                if (!string.IsNullOrEmpty(slot.ApiKey))
+                    slot.ApiKey = ApiKeyProtection.Decrypt(slot.ApiKey);
+            }
+        }
+        if (s.Polish != null && !string.IsNullOrEmpty(s.Polish.ApiKey))
+            s.Polish.ApiKey = ApiKeyProtection.Decrypt(s.Polish.ApiKey);
     }
 }

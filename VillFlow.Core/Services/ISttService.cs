@@ -5,8 +5,9 @@ namespace VillFlow.Core.Services;
 
 /// <summary>
 /// Contract for STT providers. Each implementation handles its own API format.
+/// Implementations own an HttpClient and must dispose it.
 /// </summary>
-public interface ISttService
+public interface ISttService : IDisposable
 {
     /// <summary>
     /// Transcribes WAV audio bytes to text.

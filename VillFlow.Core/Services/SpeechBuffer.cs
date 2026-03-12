@@ -29,10 +29,12 @@ public sealed class SpeechBuffer
     /// <summary>Appends a raw PCM frame to the buffer.</summary>
     public void Append(byte[] data, int offset, int count)
     {
+        ArgumentNullException.ThrowIfNull(data);
+        if (offset < 0 || count < 0 || offset + count > data.Length)
+            throw new ArgumentOutOfRangeException(nameof(offset), "Offset and count must be within data bounds.");
         lock (_lock)
         {
             if (count <= 0) return;
-            // Use AddRange with ArraySegment for efficient bulk copy
             _buffer.AddRange(new ArraySegment<byte>(data, offset, count));
         }
     }

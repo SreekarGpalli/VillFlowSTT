@@ -49,17 +49,19 @@ public static class ModelFetchService
         using var doc = JsonDocument.Parse(json);
 
         var models = new List<ModelInfo>();
-        if (doc.RootElement.TryGetProperty("data", out var data))
+        if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in data.EnumerateArray())
             {
-                var id = item.GetProperty("id").GetString() ?? "";
-                // Filter: only keep whisper/audio models
-                if (id.Contains("whisper", StringComparison.OrdinalIgnoreCase) ||
-                    id.Contains("distil-whisper", StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    models.Add(new ModelInfo(id, id));
+                    if (!item.TryGetProperty("id", out var idProp)) continue;
+                    var id = idProp.GetString() ?? "";
+                    if (id.Contains("whisper", StringComparison.OrdinalIgnoreCase) ||
+                        id.Contains("distil-whisper", StringComparison.OrdinalIgnoreCase))
+                        models.Add(new ModelInfo(id, id));
                 }
+                catch { /* Skip malformed model object */ }
             }
         }
         return models;
@@ -84,12 +86,17 @@ public static class ModelFetchService
         using var doc = JsonDocument.Parse(json);
 
         var models = new List<ModelInfo>();
-        if (doc.RootElement.TryGetProperty("data", out var data))
+        if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in data.EnumerateArray())
             {
-                var id = item.GetProperty("id").GetString() ?? "";
-                models.Add(new ModelInfo(id, id));
+                try
+                {
+                    if (!item.TryGetProperty("id", out var idProp)) continue;
+                    var id = idProp.GetString() ?? "";
+                    models.Add(new ModelInfo(id, id));
+                }
+                catch { /* Skip malformed model object */ }
             }
         }
         return models;
@@ -125,18 +132,20 @@ public static class ModelFetchService
         using var doc = JsonDocument.Parse(json);
 
         var models = new List<ModelInfo>();
-        if (doc.RootElement.TryGetProperty("data", out var data))
+        if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in data.EnumerateArray())
             {
-                var id = item.GetProperty("id").GetString() ?? "";
-                // Exclude audio/whisper models — keep only chat/LLM models
-                if (!id.Contains("whisper", StringComparison.OrdinalIgnoreCase) &&
-                    !id.Contains("distil-whisper", StringComparison.OrdinalIgnoreCase) &&
-                    !id.Contains("tool-use", StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    models.Add(new ModelInfo(id, id));
+                    if (!item.TryGetProperty("id", out var idProp)) continue;
+                    var id = idProp.GetString() ?? "";
+                    if (!id.Contains("whisper", StringComparison.OrdinalIgnoreCase) &&
+                        !id.Contains("distil-whisper", StringComparison.OrdinalIgnoreCase) &&
+                        !id.Contains("tool-use", StringComparison.OrdinalIgnoreCase))
+                        models.Add(new ModelInfo(id, id));
                 }
+                catch { /* Skip malformed model object */ }
             }
         }
         return models;

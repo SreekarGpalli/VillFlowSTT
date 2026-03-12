@@ -11,7 +11,8 @@
         Focusable="False"
         ResizeMode="NoResize"
         Width="220" Height="48"
-        WindowStartupLocation="Manual">
+        WindowStartupLocation="Manual"
+        Visibility="Collapsed">
     
     <!-- Pill-shaped floating overlay — bottom-center of screen -->
     <Border x:Name="PillBorder"
