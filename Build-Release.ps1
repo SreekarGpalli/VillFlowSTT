@@ -27,7 +27,49 @@ if (-not (Test-Path "$PublishDir\VillFlow.App.exe")) {
 Copy-Item "$PublishDir\VillFlow.App.exe" -Destination "$DistDir\VillFlow.App.exe" -Force
 Write-Host "Copied VillFlow.App.exe to $DistDir"
 
-# 2. Build WiX installer
+# 2. Build Inno Setup Installer (.exe)
+# Check multiple common install locations for Inno Setup 6
+$InnoSetupCompiler = $null
+$InnoSearchPaths = @(
+    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+    "C:\Program Files\Inno Setup 6\ISCC.exe",
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+)
+foreach ($path in $InnoSearchPaths) {
+    if (Test-Path $path) {
+        $InnoSetupCompiler = $path
+        break
+    }
+}
+# Also check PATH
+if (-not $InnoSetupCompiler) {
+    $fromPath = Get-Command iscc.exe -ErrorAction SilentlyContinue
+    if ($fromPath) { $InnoSetupCompiler = $fromPath.Source }
+}
+if ($InnoSetupCompiler) {
+    Write-Host "Building EXE installer with Inno Setup ..."
+    $IssScript = Join-Path $ProjectRoot "Installer\VillFlowSetup.iss"
+    
+    # Run ISCC, wait for completion
+    $process = Start-Process -FilePath $InnoSetupCompiler -ArgumentList "`"$IssScript`"" -Wait -PassThru
+    
+    if ($process.ExitCode -eq 0) {
+        # The .iss file puts its Output in Installer\Output
+        $OutputExe = Join-Path $ProjectRoot "Installer\Output\VillFlowSetup-1.0.0.exe"
+        if (Test-Path $OutputExe) {
+            Copy-Item $OutputExe -Destination "$DistDir\VillFlowSetup-1.0.0.exe" -Force
+            Write-Host "Copied VillFlowSetup-1.0.0.exe to $DistDir"
+        } else {
+            Write-Warning "Inno Setup output not found at: $OutputExe"
+        }
+    } else {
+        Write-Warning "Inno Setup compiler returned exit code $($process.ExitCode)"
+    }
+} else {
+    Write-Warning "Inno Setup 6 is not installed at '$InnoSetupCompiler'. Skipping .exe installer build."
+}
+
+# 3. Build WiX installer (.msi)
 Write-Host "Building MSI installer ..."
 $InstallerProj = Join-Path $ProjectRoot "VillFlow.Installer\VillFlow.Installer.wixproj"
 dotnet build $InstallerProj -c Release

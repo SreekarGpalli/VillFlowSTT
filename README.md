@@ -6,7 +6,7 @@ Hold `Ctrl+Space`, talk, release — it transcribes, optionally polishes spellin
 
 ## Getting started
 
-**Download:** Grab the latest `VillFlow.msi` or `VillFlow.App.exe` from [Releases](https://github.com/SreekarGpalli/VillFlowSTT/releases) and run it. No installer needed for the exe — just extract and go.
+**Download:** Grab `VillFlowSetup.exe` (recommended), `VillFlow.msi`, or the standalone `VillFlow.App.exe` from [Releases](https://github.com/SreekarGpalli/VillFlowSTT/releases). The setup installer handles shortcuts and Start Menu entry. The standalone exe needs no install — just run it.
 
 **Build from source:**
 ```powershell

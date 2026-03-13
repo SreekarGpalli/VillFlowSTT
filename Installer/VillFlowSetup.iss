@@ -13,7 +13,7 @@
 #define MyAppURL "https://github.com/SreekarGpalli/VillFlowSTT"
 
 ; Path to the published output (relative to this .iss file)
-#define PublishDir "..\VillFlow.App\bin\Release\net8.0-windows\win-x64\publish"
+#define PublishDir "..\publish"
 
 [Setup]
 AppId={{E7A3C1F9-B2D4-4E5F-9A6B-8C7D0E1F2A3B}
@@ -24,8 +24,9 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
-; No Start Menu group needed — app runs from system tray
-DisableProgramGroupPage=yes
+; Set the setup wizard icon and icon in Add/Remove programs
+SetupIconFile=..\VillFlow.App\Assets\app.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Output settings
 OutputDir=Output
 OutputBaseFilename=VillFlowSetup-{#MyAppVersion}
@@ -51,7 +52,7 @@ LicenseFile=..\LICENSE
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkablealone
 Name: "startup"; Description: "Start VillFlow when Windows starts"; GroupDescription: "Startup:"
 
 [Files]

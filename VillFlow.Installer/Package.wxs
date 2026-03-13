@@ -21,7 +21,6 @@
                     Name="VillFlow"
                     Description="Voice dictation — hold Ctrl+Space to record"
                     Directory="ApplicationProgramsFolder"
-                    Advertise="yes"
                     WorkingDirectory="INSTALLFOLDER" />
         </File>
       </Component>
